@@ -1,0 +1,41 @@
+# Пример config.toml (без секретов). Настоящий файл создаёт `autoticket setup`
+# в папке пользователя (см. `autoticket paths`), а не в репозитории.
+
+[helpdesk]
+base_url = "https://support.example.com"
+auth_mode = "password"            # "password" или "token"
+username = "agent@example.com"
+password = "ВАШ_ПАРОЛЬ"
+token = ""                        # для auth_mode = "token": значение из DevTools
+login_path = "/api/auth/login"
+login_username_field = "login"
+login_password_field = "password"
+token_pointer = "/token"          # "" = сессия через cookie
+auth_header = "Authorization"     # или "Cookie"
+auth_scheme = "Bearer"            # "" = значение как есть
+list_method = "GET"
+list_path = "/api/tickets?status=new"
+list_body = ""
+list_items_pointer = ""           # "" = ответ сам массив; например "/data/items"
+filter_pointer = ""               # например "/status"
+filter_values = []                # например ["new"]
+id_pointer = "/id"
+title_pointer = "/subject"
+extra_fields = ["/priority", "/created_at"]
+claim_method = "POST"
+claim_path = "/api/tickets/{id}/assign"
+claim_body = ""                   # например '{"assignee": "{username}"}'
+ticket_url = ""                   # например "https://support.example.com/tickets/{id}"
+
+[helpdesk.extra_headers]
+# "X-Requested-With" = "XMLHttpRequest"
+
+[telegram]
+bot_token = "123456:ТОКЕН_ОТ_BOTFATHER"
+chat_id = 0
+api_base = "https://api.telegram.org"
+
+[run]
+poll_interval_ms = 1000           # не меньше 250
+max_backoff_ms = 60000
+request_timeout_ms = 5000
