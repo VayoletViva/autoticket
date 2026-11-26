@@ -544,7 +544,13 @@ impl Helpdesk {
 
     pub fn parse_tickets(&self, json: &Value) -> Result<Vec<Ticket>, HelpdeskError> {
         let c = &self.cfg;
-        let items = pointer(json, &c.list_items_pointer)
+        let found = pointer(json, &c.list_items_pointer);
+        // Многие API отдают `"tickets": null` вместо `[]`, когда очередь пуста.
+        // Это не ошибка конфигурации, а просто «тикетов нет».
+        if matches!(found, Some(Value::Null)) {
+            return Ok(Vec::new());
+        }
+        let items = found
             .and_then(Value::as_array)
             .ok_or_else(|| {
                 HelpdeskError::Parse(format!(
@@ -681,5 +687,17 @@ mod tests {
         assert_eq!(t[0].id, "7");
         assert_eq!(t[0].extra, vec![("priority".to_string(), "high".to_string())]);
         assert_eq!(t[1].title, "(без темы)");
+    }
+
+    #[test]
+    fn null_list_means_empty_queue() {
+        let mut cfg = HelpdeskCfg { base_url: "http://x".into(), ..Default::default() };
+        cfg.list_items_pointer = "/data/tickets".into();
+        let hd = Helpdesk::new(cfg, Duration::from_secs(1)).unwrap();
+        let empty = hd.parse_tickets(&serde_json::json!({"data": {"tickets": null}})).unwrap();
+        assert!(empty.is_empty());
+        // Отсутствующий путь или не-массив по-прежнему ошибка конфигурации.
+        assert!(hd.parse_tickets(&serde_json::json!({"data": {}})).is_err());
+        assert!(hd.parse_tickets(&serde_json::json!({"data": {"tickets": 5}})).is_err());
     }
 }
