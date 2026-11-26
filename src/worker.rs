@@ -201,7 +201,7 @@ async fn poll_loop(mut ctx: LoopCtx, mut stop: watch::Receiver<bool>) {
     let poll = Duration::from_millis(ctx.cfg.run.poll_interval_ms.max(config::MIN_POLL_INTERVAL_MS));
     let max_backoff = Duration::from_millis(ctx.cfg.run.max_backoff_ms).max(poll);
     let mut hd = match Helpdesk::new(ctx.cfg.helpdesk.clone(), timeout) {
-        Ok(h) => Arc::new(h),
+        Ok(h) => Arc::new(with_session(h, ctx.config_path.as_deref())),
         Err(e) => {
             error!("{e}");
             return;
@@ -267,6 +267,14 @@ async fn poll_loop(mut ctx: LoopCtx, mut stop: watch::Receiver<bool>) {
     }
 }
 
+/// Подключает session.json из папки config.toml (если путь конфига известен).
+pub fn with_session(hd: Helpdesk, config_path: Option<&std::path::Path>) -> Helpdesk {
+    match config_path.and_then(|p| p.parent()) {
+        Some(dir) => hd.with_session_file(dir.join(crate::helpdesk::SESSION_FILE)),
+        None => hd,
+    }
+}
+
 fn reload_helpdesk(ctx: &mut LoopCtx, timeout: Duration) -> Option<Helpdesk> {
     let path = ctx.config_path.as_ref()?;
     let mut cfg = match config::load(path) {
@@ -281,7 +289,7 @@ fn reload_helpdesk(ctx: &mut LoopCtx, timeout: Duration) -> Option<Helpdesk> {
         return None;
     }
     info!("config.toml изменился: применяю новые настройки входа");
-    let hd = Helpdesk::new(cfg.helpdesk.clone(), timeout).ok()?;
+    let hd = with_session(Helpdesk::new(cfg.helpdesk.clone(), timeout).ok()?, Some(path));
     ctx.cfg.helpdesk = cfg.helpdesk;
     Some(hd)
 }

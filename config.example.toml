@@ -27,6 +27,14 @@ claim_path = "/api/tickets/{id}/assign"
 claim_body = ""                   # например '{"assignee": "{username}"}'
 ticket_url = ""                   # например "https://support.example.com/tickets/{id}"
 
+# Только для auth_mode = "token": обновление короткоживущего Bearer-токена,
+# если браузер сам дёргает запрос вроде /api/auth/refresh. Пусто = выключено.
+# Обновлённые сервером cookie программа сама хранит в session.json рядом с конфигом.
+# refresh_path = "/api/auth/refresh"
+# refresh_method = "POST"
+# refresh_body = ""
+# refresh_token_pointer = "/access_token"   # "" — сайт обновляет только cookie
+
 [helpdesk.extra_headers]
 # "X-Requested-With" = "XMLHttpRequest"
 

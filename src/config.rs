@@ -77,6 +77,14 @@ pub struct HelpdeskCfg {
     pub claim_body: String,
     /// Необязательная ссылка на тикет для сообщения: `https://.../tickets/{id}`.
     pub ticket_url: String,
+    /// Только для `auth_mode = "token"`: путь обновления сессии (refresh), который
+    /// вызывается один раз при ответе 401/403. Пусто: обновление выключено.
+    pub refresh_path: String,
+    pub refresh_method: String,
+    /// Необязательное тело запроса обновления (JSON как есть).
+    pub refresh_body: String,
+    /// JSON Pointer нового токена в ответе refresh. Пусто: сайт обновляет только cookie.
+    pub refresh_token_pointer: String,
 }
 
 impl Default for HelpdeskCfg {
@@ -107,6 +115,10 @@ impl Default for HelpdeskCfg {
             claim_path: "/api/tickets/{id}/assign".into(),
             claim_body: String::new(),
             ticket_url: String::new(),
+            refresh_path: String::new(),
+            refresh_method: "POST".into(),
+            refresh_body: String::new(),
+            refresh_token_pointer: "/access_token".into(),
         }
     }
 }
@@ -171,6 +183,7 @@ impl fmt::Debug for HelpdeskCfg {
             .field("title_pointer", &self.title_pointer)
             .field("claim_method", &self.claim_method)
             .field("claim_path", &self.claim_path)
+            .field("refresh_path", &self.refresh_path)
             .finish_non_exhaustive()
     }
 }
@@ -211,7 +224,7 @@ impl Config {
         if !h.claim_path.contains("{id}") {
             bail!("helpdesk.claim_path должен содержать {{id}}");
         }
-        for m in [&h.claim_method, &h.list_method] {
+        for m in [&h.claim_method, &h.list_method, &h.refresh_method] {
             reqwest::Method::from_bytes(m.trim().to_ascii_uppercase().as_bytes())
                 .with_context(|| format!("неизвестный HTTP-метод: {m}"))?;
         }
@@ -278,18 +291,25 @@ pub fn load(path: &Path) -> Result<Option<Config>> {
 
 /// Атомарно сохраняет конфиг (временный файл + rename), на unix с правами 0600.
 pub fn save(path: &Path, cfg: &Config) -> Result<()> {
-    let dir = path.parent().unwrap_or(Path::new("."));
+    let text = format!(
+        "# autoticket: настройки и секреты. Не публикуйте этот файл.\n{}",
+        toml::to_string_pretty(cfg)?
+    );
+    write_private(path, text.as_bytes())
+}
+
+/// Атомарная запись файла с секретами: временный файл + rename, на unix
+/// папка 0700 и файл 0600. Используется для config.toml и session.json.
+pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     fs::create_dir_all(dir).with_context(|| format!("не удалось создать {}", dir.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o700));
     }
-    let text = format!(
-        "# autoticket: настройки и секреты. Не публикуйте этот файл.\n{}",
-        toml::to_string_pretty(cfg)?
-    );
-    let tmp = dir.join(format!(".{CONFIG_FILE}.tmp"));
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = dir.join(format!(".{name}.tmp"));
     {
         let mut opts = fs::OpenOptions::new();
         opts.write(true).create(true).truncate(true);
@@ -301,7 +321,7 @@ pub fn save(path: &Path, cfg: &Config) -> Result<()> {
         let mut f = opts
             .open(&tmp)
             .with_context(|| format!("не удалось записать {}", tmp.display()))?;
-        f.write_all(text.as_bytes())?;
+        f.write_all(bytes)?;
         f.sync_all()?;
     }
     #[cfg(unix)]
@@ -374,6 +394,10 @@ mod tests {
         assert_eq!(cfg.helpdesk.claim_path, "/api/tickets/{id}/assign");
         assert_eq!(cfg.telegram.api_base, "https://api.telegram.org");
         assert_eq!(cfg.run.poll_interval_ms, 1000);
+        // Старый config.toml без полей refresh_*: обновление выключено.
+        assert_eq!(cfg.helpdesk.refresh_path, "");
+        assert_eq!(cfg.helpdesk.refresh_method, "POST");
+        assert_eq!(cfg.helpdesk.refresh_token_pointer, "/access_token");
     }
 
     #[test]

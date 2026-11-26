@@ -6,3 +6,4 @@ claims.csv
 logs/
 *.log
 .sandbox/
+session.json
