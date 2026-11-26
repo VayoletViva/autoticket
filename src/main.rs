@@ -89,6 +89,9 @@ impl Dirs {
     fn config_path(&self) -> PathBuf {
         self.config_dir.join(config::CONFIG_FILE)
     }
+    fn session_path(&self) -> PathBuf {
+        self.config_dir.join(autoticket::helpdesk::SESSION_FILE)
+    }
     fn log_dir(&self) -> PathBuf {
         self.data_dir.join("logs")
     }
@@ -123,6 +126,7 @@ async fn main() -> ExitCode {
                 Cmd::UninstallAutostart => autostart::uninstall(),
                 Cmd::Paths => {
                     println!("config: {}", dirs.config_path().display());
+                    println!("сессия: {}", dirs.session_path().display());
                     println!("логи:   {}", dirs.log_dir().display());
                     println!("замеры: {}", dirs.data_dir.join("claims.csv").display());
                     Ok(())
@@ -277,7 +281,8 @@ async fn cmd_bench(dirs: &Dirs, n: usize, interval_ms: u64, url: Option<String>)
         }
     } else {
         let cfg = load_existing(dirs)?;
-        let hd = Helpdesk::new(cfg.helpdesk.clone(), Duration::from_millis(cfg.run.request_timeout_ms))?;
+        let hd = Helpdesk::new(cfg.helpdesk.clone(), Duration::from_millis(cfg.run.request_timeout_ms))?
+            .with_session_file(dirs.session_path());
         let t0 = Instant::now();
         hd.login().await?;
         cold = t0.elapsed();

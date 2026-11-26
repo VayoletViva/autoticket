@@ -152,7 +152,7 @@ pub fn run_setup<R: BufRead, W: Write>(
         .to_string();
 
     let mode_default = if cfg.helpdesk.auth_mode == AuthMode::Token { "2" } else { "1" };
-    let mode = io.ask("Способ входа: 1 — логин и пароль, 2 — готовый токен/cookie из браузера", mode_default)?;
+    let mode = io.ask("Способ входа: 1 — логин и пароль, 2 — готовый токен/cookie из браузера (вход через Telegram, SSO, капча)", mode_default)?;
     cfg.helpdesk.auth_mode = if mode.trim() == "2" { AuthMode::Token } else { AuthMode::Password };
 
     match cfg.helpdesk.auth_mode {
@@ -200,6 +200,15 @@ pub fn run_setup<R: BufRead, W: Write>(
         }
         h.claim_body = io.ask("JSON-тело захвата («-» — без тела)", &h.claim_body.clone())?;
         h.ticket_url = io.ask("Ссылка на тикет для сообщения («-» — не нужна)", &h.ticket_url.clone())?;
+        if h.auth_mode == AuthMode::Token {
+            h.refresh_path = io.ask("Путь обновления сессии (refresh), если есть («-» — нет)", &h.refresh_path.clone())?;
+            if !h.refresh_path.is_empty() {
+                h.refresh_token_pointer = io.ask(
+                    "JSON Pointer нового токена в ответе refresh («-» — сайт обновляет только cookie)",
+                    &h.refresh_token_pointer.clone(),
+                )?;
+            }
+        }
     } else {
         writeln!(
             io.out,
